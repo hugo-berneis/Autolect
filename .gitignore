@@ -1,0 +1,50 @@
+# Secrets / config
+.env
+.env.*
+!.env.example
+
+# Audio & recordings
+*.wav
+*.m4a
+*.opus
+*.mp3
+*.webm
+data/audio/
+data/recordings/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+data/db/
+
+# Backups / exports
+backups/
+*.tar.gz
+*.zip
+exports/
+
+# Model caches
+models/
+*.bin
+.cache/
+~/.cache/huggingface/
+
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
