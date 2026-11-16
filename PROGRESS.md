@@ -2,7 +2,7 @@
 
 Re-read this and `CLAUDE.md` at the start of every session.
 
-## Status: Phase (b) complete — awaiting push before Phase (c)
+## Status: Phase (c) complete — awaiting push before Phase (d)
 
 ## Machine (detected 2026-11-16)
 - Apple M4, 10-core CPU, 10-core GPU, 24 GB RAM, macOS 15.7.4, arm64, Metal 3
@@ -63,15 +63,31 @@ RECOMMEND: live = small on mps int8 (cpu small fallback, 1.2x). Re-transcribe/fi
 - Tests: 19 passing (wav, ws record+resume+error, upload fake+real-ffmpeg+failure).
 - Smoke: uploaded jfk.wav (11s) -> 16kHz WAV (176000 frames); assets served.
 
-## What comes next
-- Phase (c): live transcription with lecture context (faster-whisper small/mps worker,
-  VAD rolling windows every 10-15s, push timestamped segments over WS, report RTF/lag;
-  wire the /retranscribe stub).
-- Then (d) delta+final notes, (e) auth/backup/Docker/README.
+## Finished: Phase (c) — live transcription with lecture context
+- app/transcription/: base (Segment, TranscriptionProvider Protocol, build_initial_prompt),
+  faster_whisper_provider (lazy load, mps->cpu fallback, int8/beam1/VAD), fake (tests),
+  windowing (silence cut, MIN 10s/MAX 20s), worker (LiveTranscriber: single task, bounded
+  deduped queue, per-lecture byte cursor, flat memory, RTF/lag reporting), offline (retranscribe).
+- Lecture.transcribed_sec cursor column (migration 5df77ee60cfa).
+- ws.py: starts a transcription session per connection, notifies on PCM, flush-on-stop,
+  streams {segment}/{status} to client (send-lock serializes with acks), remembers course vocab,
+  builds initial_prompt from course/topic/vocab; resume continues from the persisted cursor.
+- /retranscribe implemented (offline, runs in a thread). /regenerate still 501 (phase d).
+- Tests: 23 passing (windowing, live midstream segment, flush-on-stop, retranscribe; fake provider).
+- Smoke: real small/mps transcribed JFK clip correctly with punctuation + timestamps (3 segments).
 
-## iPhone recording not yet testable over the internet
-- getUserMedia needs HTTPS; expose via Cloudflare Tunnel/Tailscale (README in phase e).
-  Local laptop testing works at http://localhost:8000 (secure context).
+## Deferred to later phases (noted so they aren't forgotten)
+- Opus compression of finished WAV + WAV deletion (storage optimization) -> phase (d)/(e)
+  after the final notes pass marks a lecture ready.
+- Auth on the WebSocket + rate-limited login -> phase (e).
+
+## What comes next
+- Phase (d): live delta notes (Haiku, 60s, cached prefix, headings-only outline, patch-in) +
+  final adaptive-format notes (Sonnet), budget cap, token/cost logging, 3-hour flat-cost test.
+- Then (e) auth, backup/restore, Docker, README.
+
+## iPhone recording still needs HTTPS (Cloudflare Tunnel/Tailscale; README in phase e).
+  Local http://localhost:8000 works (secure context).
 
 ## Token / storage estimates (fill in at each STOP)
 - Claude tokens per lecture hour: TBD

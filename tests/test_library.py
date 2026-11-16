@@ -117,7 +117,8 @@ def test_not_found_paths(client):
     assert client.delete("/api/lectures/999").status_code == 404
 
 
-def test_pipeline_stubs_return_501(client):
+def test_pipeline_stubs(client):
     lec = _create(client)
-    assert client.post(f"/api/lectures/{lec['id']}/retranscribe").status_code == 501
+    # retranscribe with no saved audio -> 400; regenerate still stubbed (phase d).
+    assert client.post(f"/api/lectures/{lec['id']}/retranscribe").status_code == 400
     assert client.post(f"/api/lectures/{lec['id']}/regenerate").status_code == 501

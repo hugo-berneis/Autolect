@@ -66,6 +66,7 @@ class Lecture(SQLModel, table=True):
     audio_format: Optional[str] = Field(default=None)  # "wav" | "opus"
     audio_bytes: int = Field(default=0)
 
+    transcribed_sec: float = Field(default=0.0)  # cursor: audio consumed by transcription
     notes_markdown: str = Field(default="")
     summary: str = Field(default="")
 

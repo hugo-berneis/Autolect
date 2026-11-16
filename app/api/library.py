@@ -3,10 +3,15 @@ and transcript, and (stubbed until later phases) re-transcribe / regenerate.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+import asyncio
+import os
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import or_
 from sqlmodel import Session, col, delete, select
+
+from ..transcription import offline
 
 from ..auth import get_current_user
 from ..db import get_session
@@ -162,16 +167,25 @@ def download_transcript(
     )
 
 
-@router.post("/{lecture_id}/retranscribe", status_code=501)
-def retranscribe(
+@router.post("/{lecture_id}/retranscribe")
+async def retranscribe(
     lecture_id: int,
+    request: Request,
     session: Session = Depends(get_session),
     user: str = Depends(get_current_user),
-) -> None:
-    _get_owned(session, lecture_id, user)
-    raise HTTPException(
-        status_code=501, detail="Re-transcription is implemented in phase (c)."
+) -> dict:
+    lecture = _get_owned(session, lecture_id, user)
+    if not lecture.audio_path or not os.path.exists(lecture.audio_path):
+        raise HTTPException(status_code=400, detail="No saved audio for this lecture")
+    transcriber = request.app.state.transcriber
+    count = await asyncio.to_thread(
+        offline.retranscribe,
+        lecture.audio_path,
+        transcriber.provider,
+        transcriber.session_factory,
+        lecture_id,
     )
+    return {"lecture_id": lecture_id, "segments": count}
 
 
 @router.post("/{lecture_id}/regenerate", status_code=501)

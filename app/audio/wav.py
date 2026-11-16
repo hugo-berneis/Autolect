@@ -58,6 +58,15 @@ def data_len(path: str) -> int:
     return max(0, os.path.getsize(path) - HEADER_SIZE)
 
 
+def read_pcm(path: str, start: int = 0, end: int | None = None) -> bytes:
+    """Read PCM data-chunk bytes in [start, end) (offsets exclude the header)."""
+    with open(path, "rb") as f:
+        f.seek(HEADER_SIZE + start)
+        if end is None:
+            return f.read()
+        return f.read(max(0, end - start))
+
+
 def finalize(path: str) -> int:
     """Patch the header to match the actual data length. Returns data length."""
     dl = data_len(path)

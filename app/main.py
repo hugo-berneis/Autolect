@@ -1,20 +1,50 @@
 """FastAPI application factory."""
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from sqlmodel import Session
 
 from .api import courses, library, templates, upload, ws
 from .config import settings
+from .db import engine
+from .transcription.base import TranscriptionProvider
+from .transcription.faster_whisper_provider import FasterWhisperProvider
+from .transcription.worker import LiveTranscriber
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
+def make_provider() -> TranscriptionProvider:
+    return FasterWhisperProvider(
+        model=settings.whisper_model,
+        device=settings.whisper_device,
+        compute_type=settings.whisper_compute_type,
+        device_fallback=settings.whisper_device_fallback,
+        beam_size=settings.whisper_beam_size,
+    )
+
+
 def create_app() -> FastAPI:
     settings.ensure_dirs()
-    app = FastAPI(title="autolect", version="0.1.0")
+    transcriber = LiveTranscriber(
+        provider=make_provider(),
+        session_factory=lambda: Session(engine),
+    )
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        await transcriber.start()
+        try:
+            yield
+        finally:
+            await transcriber.stop()
+
+    app = FastAPI(title="autolect", version="0.1.0", lifespan=lifespan)
+    app.state.transcriber = transcriber
 
     app.include_router(library.router)
     app.include_router(templates.router)
@@ -26,7 +56,6 @@ def create_app() -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    # Serve the bare frontend. Mounted last so API routes and /docs win.
     app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
     return app
 
