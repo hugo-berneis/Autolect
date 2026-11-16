@@ -2,7 +2,7 @@
 
 Re-read this and `CLAUDE.md` at the start of every session.
 
-## Status: Phase (a) complete — awaiting push before Phase (b)
+## Status: Phase (b) complete — awaiting push before Phase (c)
 
 ## Machine (detected 2026-11-16)
 - Apple M4, 10-core CPU, 10-core GPU, 24 GB RAM, macOS 15.7.4, arm64, Metal 3
@@ -49,9 +49,29 @@ RECOMMEND: live = small on mps int8 (cpu small fallback, 1.2x). Re-transcribe/fi
 - Tests: 11 passing (library, templates, courses, migration create-all). uvicorn smoke OK.
 - Project venv at .venv (py3.11, gitignored).
 
+## Finished: Phase (b) — audio ingest over WebSocket + upload
+- app/audio/wav.py: crash-safe incremental 16kHz mono 16-bit WAV (append PCM, patch
+  header on finalize; data_len derived from filesize so nothing is lost on crash).
+- app/audio/transcode.py: ffmpeg -> 16kHz mono pcm_s16le for uploads.
+- app/api/ws.py: /ws/record WebSocket. start/resume/stop; binary PCM frames appended
+  off the event loop (asyncio.to_thread); offset-based resume (server acks only persisted
+  bytes -> no loss/no dup); single-writer guard per lecture.
+- app/api/upload.py: POST /api/upload (multipart) -> transcode -> lecture (status processing).
+- static/worklet.js: AudioWorklet downsamples mic (ctx rate) -> 16kHz int16 PCM.
+- static/index.html: recorder (getUserMedia on tap, WS stream, pause/resume, Wake Lock +
+  warning, auto-reconnect + resume with client-side unacked buffer) + upload form + library.
+- Tests: 19 passing (wav, ws record+resume+error, upload fake+real-ffmpeg+failure).
+- Smoke: uploaded jfk.wav (11s) -> 16kHz WAV (176000 frames); assets served.
+
 ## What comes next
-- Phase (b): audio ingest over WebSocket (AudioWorklet 16kHz mono PCM) + file upload.
-- Then (c) live transcription, (d) delta+final notes, (e) auth/backup/Docker/README.
+- Phase (c): live transcription with lecture context (faster-whisper small/mps worker,
+  VAD rolling windows every 10-15s, push timestamped segments over WS, report RTF/lag;
+  wire the /retranscribe stub).
+- Then (d) delta+final notes, (e) auth/backup/Docker/README.
+
+## iPhone recording not yet testable over the internet
+- getUserMedia needs HTTPS; expose via Cloudflare Tunnel/Tailscale (README in phase e).
+  Local laptop testing works at http://localhost:8000 (secure context).
 
 ## Token / storage estimates (fill in at each STOP)
 - Claude tokens per lecture hour: TBD

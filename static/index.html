@@ -7,25 +7,233 @@
 </head>
 <body>
 <h1>autolect</h1>
-<p>Self-hosted lecture notes. Recording UI arrives in phase (b); live notes in phase (d).</p>
+<p id="warn"><b>Note:</b> Recording needs HTTPS (or localhost) and microphone permission.
+Locking the phone or leaving Safari stops capture.</p>
+
+<h2>Record</h2>
+<form id="meta" onsubmit="return false">
+  <div><label>Title <input id="title" value="Lecture"></label></div>
+  <div><label>Course <input id="course"></label></div>
+  <div><label>Topic <input id="topic"></label></div>
+  <div><label>Vocabulary / acronyms <input id="vocab" size="40"></label></div>
+  <div><label>Language <input id="lang" value="en" size="4"></label></div>
+</form>
+<p>
+  <button id="start">Start</button>
+  <button id="pause" disabled>Pause</button>
+  <button id="resume" disabled>Resume</button>
+  <button id="stop" disabled>Stop</button>
+</p>
+<p id="status">idle</p>
+
+<h2>Upload a recording</h2>
+<form id="uploadForm" onsubmit="return false">
+  <input type="file" id="file" accept="audio/*">
+  <input id="uptitle" placeholder="Title" value="Uploaded lecture">
+  <input id="upcourse" placeholder="Course">
+  <button id="upload">Upload</button>
+  <span id="upstatus"></span>
+</form>
+
 <h2>Library</h2>
 <ul id="lectures"></ul>
+
 <script>
-// Bare functional placeholder — lists saved lectures from the library API.
+const $ = (id) => document.getElementById(id);
+function setStatus(s) { $('status').textContent = s; }
+
 async function loadLectures() {
+  const list = $('lectures');
   const res = await fetch('/api/lectures');
-  const list = document.getElementById('lectures');
   list.textContent = '';
-  if (!res.ok) { list.textContent = 'Failed to load lectures.'; return; }
+  if (!res.ok) { list.textContent = 'Failed to load.'; return; }
   const lectures = await res.json();
-  if (lectures.length === 0) { list.textContent = 'No lectures yet.'; return; }
+  if (!lectures.length) { list.textContent = 'No lectures yet.'; return; }
   for (const lec of lectures) {
     const li = document.createElement('li');
     const course = lec.course ? ' [' + lec.course + ']' : '';
-    li.textContent = lec.title + course + ' — ' + lec.status;
+    const dur = lec.duration_sec ? ' — ' + lec.duration_sec.toFixed(1) + 's' : '';
+    li.textContent = lec.title + course + ' — ' + lec.status + dur;
     list.appendChild(li);
   }
 }
+
+// ---- Recorder ----
+const rec = {
+  ws: null, ctx: null, node: null, stream: null, wakeLock: null,
+  lectureId: null, recording: false, paused: false,
+  pending: [], pendingBytes: 0, confirmed: 0, reconnectTimer: null, backoff: 500,
+};
+
+function wsUrl() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  return proto + '://' + location.host + '/ws/record';
+}
+
+function enqueue(buf) {
+  rec.pending.push(buf);
+  rec.pendingBytes += buf.byteLength;
+  if (rec.ws && rec.ws.readyState === WebSocket.OPEN) rec.ws.send(buf);
+}
+
+// Drop `bytes` from the front of the pending queue (already persisted server-side).
+function trimPending(targetConfirmed) {
+  let drop = targetConfirmed - rec.confirmed;
+  while (drop > 0 && rec.pending.length) {
+    const head = rec.pending[0];
+    if (head.byteLength <= drop) {
+      drop -= head.byteLength;
+      rec.pendingBytes -= head.byteLength;
+      rec.pending.shift();
+    } else {
+      rec.pending[0] = head.slice(drop);
+      rec.pendingBytes -= drop;
+      drop = 0;
+    }
+  }
+  rec.confirmed = targetConfirmed;
+}
+
+function resendPending() {
+  for (const buf of rec.pending) {
+    if (rec.ws && rec.ws.readyState === WebSocket.OPEN) rec.ws.send(buf);
+  }
+}
+
+function connect(resume) {
+  const ws = new WebSocket(wsUrl());
+  ws.binaryType = 'arraybuffer';
+  rec.ws = ws;
+  ws.onopen = () => {
+    if (resume) {
+      ws.send(JSON.stringify({ type: 'resume', lecture_id: rec.lectureId }));
+    } else {
+      ws.send(JSON.stringify({
+        type: 'start',
+        title: $('title').value || 'Lecture',
+        course: $('course').value || null,
+        context_topic: $('topic').value || null,
+        context_vocab: $('vocab').value || '',
+        language: $('lang').value || 'en',
+      }));
+    }
+  };
+  ws.onmessage = (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.type === 'ready') {
+      rec.lectureId = m.lecture_id;
+      rec.backoff = 500;
+      trimPending(m.received_bytes); // drop anything already persisted
+      resendPending();
+      setStatus('recording (lecture ' + rec.lectureId + ')');
+    } else if (m.type === 'ack') {
+      trimPending(m.received_bytes);
+    } else if (m.type === 'stopped') {
+      setStatus('saved lecture ' + m.lecture_id + ' (' + m.duration_sec.toFixed(1) + 's)');
+      cleanup();
+      loadLectures();
+    } else if (m.type === 'error') {
+      setStatus('error: ' + m.message);
+    }
+  };
+  ws.onclose = () => {
+    if (rec.recording) scheduleReconnect();
+  };
+  ws.onerror = () => { try { ws.close(); } catch (e) {} };
+}
+
+function scheduleReconnect() {
+  if (rec.reconnectTimer) return;
+  setStatus('disconnected — buffering, reconnecting…');
+  rec.reconnectTimer = setTimeout(() => {
+    rec.reconnectTimer = null;
+    rec.backoff = Math.min(rec.backoff * 2, 10000);
+    connect(true);
+  }, rec.backoff);
+}
+
+async function start() {
+  try {
+    rec.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) { setStatus('mic permission denied'); return; }
+  rec.ctx = new (window.AudioContext || window.webkitAudioContext)();
+  await rec.ctx.audioWorklet.addModule('/worklet.js');
+  const src = rec.ctx.createMediaStreamSource(rec.stream);
+  rec.node = new AudioWorkletNode(rec.ctx, 'pcm-processor');
+  rec.node.port.onmessage = (ev) => {
+    if (rec.recording && !rec.paused) enqueue(ev.data);
+  };
+  src.connect(rec.node);
+  // Do not route to speakers (avoid feedback); worklet still runs.
+  rec.recording = true;
+  rec.paused = false;
+  rec.pending = []; rec.pendingBytes = 0; rec.confirmed = 0; rec.lectureId = null;
+  requestWakeLock();
+  connect(false);
+  $('start').disabled = true; $('stop').disabled = false;
+  $('pause').disabled = false; $('resume').disabled = true;
+}
+
+function pause() {
+  rec.paused = true;
+  $('pause').disabled = true; $('resume').disabled = false;
+  setStatus('paused');
+}
+function resumeRec() {
+  rec.paused = false;
+  $('pause').disabled = false; $('resume').disabled = true;
+  setStatus('recording (lecture ' + rec.lectureId + ')');
+}
+
+function stop() {
+  rec.recording = false;
+  if (rec.ws && rec.ws.readyState === WebSocket.OPEN) {
+    rec.ws.send(JSON.stringify({ type: 'stop' }));
+  } else {
+    cleanup();
+  }
+  setStatus('stopping…');
+}
+
+function cleanup() {
+  rec.recording = false;
+  if (rec.reconnectTimer) { clearTimeout(rec.reconnectTimer); rec.reconnectTimer = null; }
+  if (rec.node) { try { rec.node.disconnect(); } catch (e) {} }
+  if (rec.ctx) { try { rec.ctx.close(); } catch (e) {} }
+  if (rec.stream) rec.stream.getTracks().forEach((t) => t.stop());
+  releaseWakeLock();
+  rec.node = rec.ctx = rec.stream = null;
+  $('start').disabled = false; $('stop').disabled = true;
+  $('pause').disabled = true; $('resume').disabled = true;
+}
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) rec.wakeLock = await navigator.wakeLock.request('screen');
+  } catch (e) {}
+}
+function releaseWakeLock() {
+  if (rec.wakeLock) { try { rec.wakeLock.release(); } catch (e) {} rec.wakeLock = null; }
+}
+
+async function doUpload() {
+  const f = $('file').files[0];
+  if (!f) { $('upstatus').textContent = 'pick a file'; return; }
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('title', $('uptitle').value || 'Uploaded lecture');
+  if ($('upcourse').value) fd.append('course', $('upcourse').value);
+  $('upstatus').textContent = 'uploading…';
+  const res = await fetch('/api/upload', { method: 'POST', body: fd });
+  $('upstatus').textContent = res.ok ? 'uploaded' : 'failed: ' + res.status;
+  if (res.ok) loadLectures();
+}
+
+$('start').onclick = start;
+$('pause').onclick = pause;
+$('resume').onclick = resumeRec;
+$('stop').onclick = stop;
+$('upload').onclick = doUpload;
 loadLectures();
 </script>
 </body>

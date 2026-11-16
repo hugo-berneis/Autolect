@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from .api import courses, library, templates
+from .api import courses, library, templates, upload, ws
 from .config import settings
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -19,6 +19,8 @@ def create_app() -> FastAPI:
     app.include_router(library.router)
     app.include_router(templates.router)
     app.include_router(courses.router)
+    app.include_router(upload.router)
+    app.include_router(ws.router)
 
     @app.get("/health", tags=["meta"])
     def health() -> dict[str, str]:

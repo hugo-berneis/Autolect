@@ -12,6 +12,16 @@ from app.db import get_session
 from app.main import app
 
 
+@pytest.fixture(autouse=True)
+def tmp_dirs(tmp_path, monkeypatch):
+    """Keep all file writes (audio, db) inside the test's tmp dir."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(settings, "audio_dir", tmp_path / "audio")
+    (tmp_path / "audio").mkdir(parents=True, exist_ok=True)
+
+
 @pytest.fixture
 def engine(tmp_path):
     db = tmp_path / "test.db"
