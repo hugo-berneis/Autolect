@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>autolect</title>
+</head>
+<body>
+<h1>autolect</h1>
+<p>Self-hosted lecture notes. Recording UI arrives in phase (b); live notes in phase (d).</p>
+<h2>Library</h2>
+<ul id="lectures"></ul>
+<script>
+// Bare functional placeholder — lists saved lectures from the library API.
+async function loadLectures() {
+  const res = await fetch('/api/lectures');
+  const list = document.getElementById('lectures');
+  list.textContent = '';
+  if (!res.ok) { list.textContent = 'Failed to load lectures.'; return; }
+  const lectures = await res.json();
+  if (lectures.length === 0) { list.textContent = 'No lectures yet.'; return; }
+  for (const lec of lectures) {
+    const li = document.createElement('li');
+    const course = lec.course ? ' [' + lec.course + ']' : '';
+    li.textContent = lec.title + course + ' — ' + lec.status;
+    list.appendChild(li);
+  }
+}
+loadLectures();
+</script>
+</body>
+</html>

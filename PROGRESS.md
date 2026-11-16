@@ -2,7 +2,7 @@
 
 Re-read this and `CLAUDE.md` at the start of every session.
 
-## Status: Phase 1 (setup) — awaiting approval of plan before building
+## Status: Phase (a) complete — awaiting push before Phase (b)
 
 ## Machine (detected 2026-11-16)
 - Apple M4, 10-core CPU, 10-core GPU, 24 GB RAM, macOS 15.7.4, arm64, Metal 3
@@ -39,11 +39,19 @@ RECOMMEND: live = small on mps int8 (cpu small fallback, 1.2x). Re-transcribe/fi
 - Live+final model pair (Haiku 4.5 + Sonnet 4.6 recommended; Opus 4.8 optional for final).
 - lecture-note-app (PolyForm Noncommercial): copy code, or study-only/avoid?
 
+## Finished: Phase (a) — skeleton, storage, migrations, library API
+- app/: config, db, models (Lecture/TranscriptSegment/Template/Course, all with user_id),
+  auth stub (single-user get_current_user), main (app factory + static mount + /health).
+- API: lectures (create/list/search/get/rename/retag/delete/notes.md/transcript;
+  retranscribe+regenerate stubbed 501), templates CRUD, courses upsert/get (vocab memory).
+- Alembic configured; initial migration dfa1b847cecb builds all 4 tables; upgrade/downgrade verified.
+- static/index.html bare placeholder lists lectures. .env.example, requirements.txt, pytest.ini.
+- Tests: 11 passing (library, templates, courses, migration create-all). uvicorn smoke OK.
+- Project venv at .venv (py3.11, gitignored).
+
 ## What comes next
-1. Clone + skim references, record licenses in THIRD_PARTY_NOTICES.md.
-2. Benchmark Whisper models on this M4; show real-time factors; recommend one.
-3. Get plan/file-layout/reuse-list approved.
-4. Phase (a): skeleton, .gitignore, storage, migrations, library API.
+- Phase (b): audio ingest over WebSocket (AudioWorklet 16kHz mono PCM) + file upload.
+- Then (c) live transcription, (d) delta+final notes, (e) auth/backup/Docker/README.
 
 ## Token / storage estimates (fill in at each STOP)
 - Claude tokens per lecture hour: TBD
