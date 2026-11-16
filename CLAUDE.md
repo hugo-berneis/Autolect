@@ -103,8 +103,9 @@ REMINDER: never push, never commit unless told. Stop after every phase and wait.
 ## Stack (summary — see original brief for full detail)
 - Python 3.11+, FastAPI, uvicorn, SQLite via SQLModel, Alembic, pytest.
 - Transcription: local faster-whisper behind a `TranscriptionProvider` interface.
-  Model/device/compute type from .env. NOTE: on Apple Silicon, CTranslate2 runs
-  CPU-only (no Metal); device=cpu, compute_type=int8.
+  Model/device/compute type from .env. NOTE: CTranslate2 4.9 has an EXPERIMENTAL
+  Metal (MPS) backend on Apple Silicon — device=mps is ~2x faster than cpu on
+  base/small. Default device=mps, compute_type=int8, with cpu fallback in .env.
 - Notes: Claude API via official `anthropic` SDK behind a `NotesProvider`
   interface. Model IDs/keys from .env. Check Anthropic docs for current model IDs,
   caching and pricing.

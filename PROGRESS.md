@@ -8,7 +8,16 @@ Re-read this and `CLAUDE.md` at the start of every session.
 - Apple M4, 10-core CPU, 10-core GPU, 24 GB RAM, macOS 15.7.4, arm64, Metal 3
 - python3.11 (/opt/homebrew/bin), python3.12 (~/.local/bin). Default python3 = 3.15.0 (too new for ML wheels).
 - ffmpeg 9.0.2 present.
-- KEY: faster-whisper/CTranslate2 is CPU-only on Apple Silicon (no Metal). device=cpu, compute_type=int8.
+- CORRECTION: CTranslate2 4.9.0 has an experimental Metal (MPS) backend. device=mps ~2x cpu on base/small.
+
+## Whisper benchmark (2026-11-16, M4, faster-whisper 1.2.1 / ct2 4.9.0; 66s clip, int8, beam=1, VAD)
+| model  | cpu RTF (x realtime) | mps RTF (x realtime) | notes |
+|--------|---------------------|----------------------|-------|
+| tiny   | 0.145 (6.9x)        | 0.188 (5.3x)         | cpu wins at tiny; no punctuation/casing |
+| base   | 0.588 (1.7x)        | 0.260 (3.8x)         | mps 2.3x faster |
+| small  | 0.857 (1.2x)        | 0.630 (1.6x)         | **live pick**: proper punctuation+casing, keeps up with headroom |
+| medium | 1.976 (0.5x)        | 1.203 (0.8x)         | slower than realtime even on mps -> offline/final re-transcribe only |
+RECOMMEND: live = small on mps int8 (cpu small fallback, 1.2x). Re-transcribe/final quality = medium (offline OK).
 
 ## Finished phases
 - (none yet) — created CLAUDE.md, PROGRESS.md, .gitignore, THIRD_PARTY_NOTICES.md;
