@@ -108,6 +108,21 @@ async def record(
 
     await send({"type": "ready", "lecture_id": lecture_id, "received_bytes": received})
 
+    # Live notes loop: every interval, update notes from the new transcript.
+    notes_engine = websocket.app.state.notes_engine
+    notes_engine.start_session(lecture_id, send)
+    interval = max(5, settings.notes_update_interval_sec)
+
+    async def _notes_loop() -> None:
+        try:
+            while True:
+                await asyncio.sleep(interval)
+                await notes_engine.update_once(lecture_id)
+        except asyncio.CancelledError:
+            pass
+
+    notes_task = asyncio.create_task(_notes_loop())
+
     since_ack = 0
     try:
         while True:
@@ -129,10 +144,19 @@ async def record(
                 ctrl = _json(msg)
             except ValueError:
                 continue
+            if ctrl.get("type") == "note":
+                notes_engine.add_typed_note(
+                    lecture_id, received / wav.BYTES_PER_SEC, ctrl.get("text", "")
+                )
+                continue
             if ctrl.get("type") == "stop":
+                notes_task.cancel()
                 await transcriber.flush(lecture_id)
                 transcriber.stop_session(lecture_id)
                 await _finish(session, lecture_id, path)
+                await notes_engine.update_once(lecture_id, force=True)
+                await notes_engine.finalize(lecture_id)
+                notes_engine.stop_session(lecture_id)
                 final = wav.data_len(path)
                 await send(
                     {
@@ -148,7 +172,9 @@ async def record(
     except WebSocketDisconnect:
         pass
     finally:
+        notes_task.cancel()
         transcriber.stop_session(lecture_id)
+        notes_engine.stop_session(lecture_id)
         await _release(lecture_id)
 
 

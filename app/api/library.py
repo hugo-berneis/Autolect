@@ -188,16 +188,22 @@ async def retranscribe(
     return {"lecture_id": lecture_id, "segments": count}
 
 
-@router.post("/{lecture_id}/regenerate", status_code=501)
-def regenerate_notes(
+@router.post("/{lecture_id}/regenerate")
+async def regenerate_notes(
     lecture_id: int,
+    request: Request,
     session: Session = Depends(get_session),
     user: str = Depends(get_current_user),
-) -> None:
-    _get_owned(session, lecture_id, user)
-    raise HTTPException(
-        status_code=501, detail="Notes regeneration is implemented in phase (d)."
-    )
+) -> dict:
+    lecture = _get_owned(session, lecture_id, user)
+    has_transcript = session.exec(
+        select(TranscriptSegment.id).where(TranscriptSegment.lecture_id == lecture_id)
+    ).first()
+    if not has_transcript:
+        raise HTTPException(status_code=400, detail="No transcript to generate notes from")
+    engine = request.app.state.notes_engine
+    regenerated = await engine.finalize(lecture_id)
+    return {"lecture_id": lecture_id, "regenerated": regenerated}
 
 
 def _ts(seconds: float) -> str:

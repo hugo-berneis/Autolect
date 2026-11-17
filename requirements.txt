@@ -13,3 +13,6 @@ pytest-asyncio>=0.23
 # Phase (c) — local transcription.
 faster-whisper>=1.0
 numpy>=1.26
+
+# Phase (d) — notes via Claude.
+anthropic>=0.49

@@ -41,6 +41,7 @@ def session(engine) -> Iterator[Session]:
 
 @pytest.fixture
 def client(engine) -> Iterator[TestClient]:
+    from app.notes.fake import FakeNotesProvider
     from app.transcription.fake import FakeTranscriptionProvider
 
     def override() -> Iterator[Session]:
@@ -48,9 +49,11 @@ def client(engine) -> Iterator[TestClient]:
             yield s
 
     app.dependency_overrides[get_session] = override
-    # Deterministic transcription against the test DB (no model, no network).
+    # Deterministic transcription + notes against the test DB (no model/network).
     app.state.transcriber.set_provider(FakeTranscriptionProvider())
     app.state.transcriber.session_factory = lambda: Session(engine)
+    app.state.notes_engine.set_provider(FakeNotesProvider())
+    app.state.notes_engine.session_factory = lambda: Session(engine)
 
     with TestClient(app) as c:
         yield c

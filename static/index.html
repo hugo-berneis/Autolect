@@ -25,6 +25,17 @@ Locking the phone or leaving Safari stops capture.</p>
   <button id="stop" disabled>Stop</button>
 </p>
 <p id="status">idle</p>
+<p>Type a high-priority note:
+  <input id="noteText" size="40">
+  <button id="addNote" disabled>Add note</button>
+</p>
+<p id="cost"></p>
+
+<h2>Live transcript</h2>
+<div id="transcript"></div>
+
+<h2>Notes</h2>
+<pre id="notes" style="white-space:pre-wrap"></pre>
 
 <h2>Upload a recording</h2>
 <form id="uploadForm" onsubmit="return false">
@@ -128,6 +139,21 @@ function connect(resume) {
       setStatus('recording (lecture ' + rec.lectureId + ')');
     } else if (m.type === 'ack') {
       trimPending(m.received_bytes);
+    } else if (m.type === 'segment') {
+      const div = document.getElementById('transcript');
+      const p = document.createElement('div');
+      const t = Math.floor(m.start);
+      p.textContent = '[' + String(Math.floor(t / 60)).padStart(2, '0') + ':' +
+        String(t % 60).padStart(2, '0') + '] ' + m.text;
+      div.appendChild(p);
+    } else if (m.type === 'notes' || m.type === 'notes_final') {
+      if (m.markdown) document.getElementById('notes').textContent = m.markdown;
+    } else if (m.type === 'notes_cost') {
+      document.getElementById('cost').textContent =
+        'est. cost: $' + m.est_cost_usd.toFixed(4) + (m.paused ? ' (notes paused)' : '');
+    } else if (m.type === 'notes_paused') {
+      setStatus('notes paused: budget cap $' + m.est_cost_usd.toFixed(2) +
+        ' reached — still transcribing');
     } else if (m.type === 'stopped') {
       setStatus('saved lecture ' + m.lecture_id + ' (' + m.duration_sec.toFixed(1) + 's)');
       cleanup();
@@ -169,9 +195,19 @@ async function start() {
   rec.paused = false;
   rec.pending = []; rec.pendingBytes = 0; rec.confirmed = 0; rec.lectureId = null;
   requestWakeLock();
+  document.getElementById('transcript').textContent = '';
+  document.getElementById('notes').textContent = '';
   connect(false);
   $('start').disabled = true; $('stop').disabled = false;
   $('pause').disabled = false; $('resume').disabled = true;
+  $('addNote').disabled = false;
+}
+
+function addNote() {
+  const text = $('noteText').value.trim();
+  if (!text || !rec.ws || rec.ws.readyState !== WebSocket.OPEN) return;
+  rec.ws.send(JSON.stringify({ type: 'note', text: text }));
+  $('noteText').value = '';
 }
 
 function pause() {
@@ -205,6 +241,7 @@ function cleanup() {
   rec.node = rec.ctx = rec.stream = null;
   $('start').disabled = false; $('stop').disabled = true;
   $('pause').disabled = true; $('resume').disabled = true;
+  $('addNote').disabled = true;
 }
 
 async function requestWakeLock() {
@@ -233,6 +270,7 @@ $('start').onclick = start;
 $('pause').onclick = pause;
 $('resume').onclick = resumeRec;
 $('stop').onclick = stop;
+$('addNote').onclick = addNote;
 $('upload').onclick = doUpload;
 loadLectures();
 </script>

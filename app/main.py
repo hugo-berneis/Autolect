@@ -11,6 +11,9 @@ from sqlmodel import Session
 from .api import courses, library, templates, upload, ws
 from .config import settings
 from .db import engine
+from .notes.base import NotesProvider
+from .notes.claude_provider import ClaudeNotesProvider
+from .notes.engine import NotesEngine
 from .transcription.base import TranscriptionProvider
 from .transcription.faster_whisper_provider import FasterWhisperProvider
 from .transcription.worker import LiveTranscriber
@@ -28,10 +31,23 @@ def make_provider() -> TranscriptionProvider:
     )
 
 
+def make_notes_provider() -> NotesProvider:
+    return ClaudeNotesProvider(
+        live_model=settings.live_model,
+        final_model=settings.final_model,
+        api_key=settings.anthropic_api_key,
+        use_batch_for_final=settings.use_batch_api_for_final,
+    )
+
+
 def create_app() -> FastAPI:
     settings.ensure_dirs()
     transcriber = LiveTranscriber(
         provider=make_provider(),
+        session_factory=lambda: Session(engine),
+    )
+    notes_engine = NotesEngine(
+        provider=make_notes_provider(),
         session_factory=lambda: Session(engine),
     )
 
@@ -45,6 +61,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="autolect", version="0.1.0", lifespan=lifespan)
     app.state.transcriber = transcriber
+    app.state.notes_engine = notes_engine
 
     app.include_router(library.router)
     app.include_router(templates.router)

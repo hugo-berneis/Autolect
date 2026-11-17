@@ -67,8 +67,11 @@ class Lecture(SQLModel, table=True):
     audio_bytes: int = Field(default=0)
 
     transcribed_sec: float = Field(default=0.0)  # cursor: audio consumed by transcription
+    noted_sec: float = Field(default=0.0)  # cursor: transcript consumed by live notes
     notes_markdown: str = Field(default="")
     summary: str = Field(default="")
+    final_hash: str = Field(default="")  # dedup: hash of transcript+template of last final pass
+    notes_paused: bool = Field(default=False)  # live notes paused (budget cap hit)
 
     # usage / cost accounting (populated in phase d)
     input_tokens: int = Field(default=0)
@@ -87,3 +90,14 @@ class TranscriptSegment(SQLModel, table=True):
     start_sec: float = Field(default=0.0)
     end_sec: float = Field(default=0.0)
     text: str = Field(default="")
+
+
+class TypedNote(SQLModel, table=True):
+    """A note typed by the user while recording — timestamped and treated as a
+    high-priority point for Claude to build notes around."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    lecture_id: int = Field(foreign_key="lecture.id", index=True)
+    at_sec: float = Field(default=0.0)
+    text: str = Field(default="")
+    created_at: datetime = Field(default_factory=utcnow)

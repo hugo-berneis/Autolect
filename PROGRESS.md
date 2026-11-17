@@ -2,7 +2,7 @@
 
 Re-read this and `CLAUDE.md` at the start of every session.
 
-## Status: Phase (c) complete — awaiting push before Phase (d)
+## Status: Phase (d) complete — awaiting push before Phase (e)
 
 ## Machine (detected 2026-11-16)
 - Apple M4, 10-core CPU, 10-core GPU, 24 GB RAM, macOS 15.7.4, arm64, Metal 3
@@ -81,10 +81,35 @@ RECOMMEND: live = small on mps int8 (cpu small fallback, 1.2x). Re-transcribe/fi
   after the final notes pass marks a lecture ready.
 - Auth on the WebSocket + rate-limited login -> phase (e).
 
+## Finished: Phase (d) — live delta notes + final adaptive notes
+- app/notes/: base (NotesProvider, Usage, SectionPatch, Delta/Final results), document
+  (NotesDocument parse/upsert/outline/render, SYSTEM_PROMPT + DEFAULT_TEMPLATE adaptive rules,
+  clean_transcript filler strip), pricing (Haiku/Sonnet/Opus + cache rates), fake provider,
+  claude_provider (cached system+template prefix, structured-JSON delta, tight max_tokens,
+  no thinking, optional Batch API final), engine (NotesEngine).
+- NotesEngine: delta loop every interval; reads new transcript via noted_sec cursor; sends
+  only outline(headings)+delta; patches returned sections; skips < MIN_NEW_WORDS; dedup via
+  content hash (retries/regenerate don't double-spend); per-lecture budget cap pauses live
+  notes (transcription continues); logs in/out/cached tokens + est cost per call; final pass
+  (strong model) on stop sets status ready; graceful on Claude errors (keep last good notes).
+- Lecture cursors/accounting: noted_sec, final_hash, notes_paused (migration e9b25cea3297);
+  TypedNote table (typed high-priority notes while recording).
+- ws.py: notes loop task per connection, typed-note ingest, flush+final on stop, streams
+  segment/notes/notes_cost/notes_paused/notes_final; send-lock serializes everything.
+- /regenerate implemented (final pass over saved transcript, dedup). index.html now shows
+  live transcript + notes + cost + a typed-note box.
+- Tests: 33 passing incl. 3-HOUR FLAT-COST PROOF (180 updates: 1 call/update, bounded delta,
+  linear tokens, memory < 80MB, final once), dedup, budget pause, document model.
+- Smoke: real whisper + keyless graceful notes degradation (HTTP 200, no crash, no spend).
+
+## NOT yet tested: real Claude notes (needs ANTHROPIC_API_KEY; would spend credits).
+  Logic fully covered by fake-provider tests. To test real: set key in .env and record/regenerate.
+
 ## What comes next
-- Phase (d): live delta notes (Haiku, 60s, cached prefix, headings-only outline, patch-in) +
-  final adaptive-format notes (Sonnet), budget cap, token/cost logging, 3-hour flat-cost test.
-- Then (e) auth, backup/restore, Docker, README.
+- Phase (e): auth (one password -> session cookie, protect everything incl. WS, rate-limit
+  login), backup/restore (one-command archive+restore of db+notes.md+audio), Opus compression
+  of finished WAV (storage opt, deferred from c/d), Dockerfile + no-Docker path, README
+  (setup, HTTPS via Cloudflare Tunnel/Tailscale, keep-awake).
 
 ## iPhone recording still needs HTTPS (Cloudflare Tunnel/Tailscale; README in phase e).
   Local http://localhost:8000 works (secure context).

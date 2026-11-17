@@ -28,7 +28,8 @@ def test_record_stream_stop_persists(client, session):
 
     lec = session.get(Lecture, lid)
     assert lec is not None
-    assert lec.status.value == "processing"
+    # stop runs the final notes pass -> lecture becomes ready
+    assert lec.status.value == "ready"
     assert lec.audio_bytes == 16000 + wav.HEADER_SIZE
     assert abs(lec.duration_sec - 0.5) < 1e-6  # 16000 bytes / 32000 = 0.5s
 
