@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     whisper_device_fallback: str = "cpu"
     whisper_beam_size: int = 1
 
+    # --- storage optimization (phase e) ---
+    compress_audio: bool = True  # after final notes, WAV -> Opus, delete WAV
+    opus_bitrate: str = "24k"
+    audio_retention_days: int = 0  # 0 = keep forever; else delete audio older than N days
+
     # --- notes / Claude (phase d) ---
     anthropic_api_key: str = ""
     live_model: str = "claude-haiku-4-5"

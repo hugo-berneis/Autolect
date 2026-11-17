@@ -65,3 +65,28 @@ def test_resume_unknown_lecture_errors(client):
         ws.send_json({"type": "resume", "lecture_id": 99999})
         m = ws.receive_json()
         assert m["type"] == "error"
+
+
+def test_stop_compresses_to_opus(client, session, monkeypatch):
+    import shutil
+
+    if shutil.which("ffmpeg") is None:
+        import pytest
+
+        pytest.skip("ffmpeg not installed")
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "compress_audio", True)
+    # ~1s of non-silent audio so Opus has something to encode.
+    pcm = b"\x00\x40" * 16000
+    with client.websocket_connect("/ws/record") as ws:
+        ws.send_json({"type": "start", "title": "Opus"})
+        lid = recv_until(ws, "ready")["lecture_id"]
+        ws.send_bytes(pcm)
+        ws.send_json({"type": "stop"})
+        recv_until(ws, "stopped")
+
+    lec = session.get(Lecture, lid)
+    assert lec.audio_format == "opus"
+    assert lec.audio_path.endswith(".opus")
+    assert lec.audio_bytes < 32044  # much smaller than the raw WAV

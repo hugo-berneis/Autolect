@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session
 
-from .api import courses, library, templates, upload, ws
+from .api import auth_routes, backup_routes, courses, library, templates, upload, ws
 from .config import settings
 from .db import engine
 from .notes.base import NotesProvider
@@ -53,6 +53,16 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        if settings.audio_retention_days > 0:
+            from .backup import delete_old_audio
+
+            removed = delete_old_audio(settings.audio_retention_days)
+            if removed:
+                import logging
+
+                logging.getLogger("autolect").info(
+                    "retention: removed %d old audio file(s)", removed
+                )
         await transcriber.start()
         try:
             yield
@@ -63,6 +73,8 @@ def create_app() -> FastAPI:
     app.state.transcriber = transcriber
     app.state.notes_engine = notes_engine
 
+    app.include_router(auth_routes.router)
+    app.include_router(backup_routes.router)
     app.include_router(library.router)
     app.include_router(templates.router)
     app.include_router(courses.router)

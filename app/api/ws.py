@@ -24,11 +24,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlmodel import Session, select
 
 from ..audio import wav
+from ..audio.transcode import TranscodeError, compress_to_opus
 from ..auth import get_current_user
 from ..config import settings
 from ..db import get_session
@@ -158,6 +160,7 @@ async def record(
                 await notes_engine.finalize(lecture_id)
                 notes_engine.stop_session(lecture_id)
                 final = wav.data_len(path)
+                await _compress_audio(session, lecture_id, path)
                 await send(
                     {
                         "type": "stopped",
@@ -259,6 +262,30 @@ def _prompt_and_cursor(session: Session, lecture: Lecture) -> tuple[str, int, in
         ).all()
     )
     return prompt, cursor_bytes, seq
+
+
+async def _compress_audio(session: Session, lecture_id: int, wav_path: str) -> None:
+    """After the transcript is produced, compress WAV -> Opus (~10x smaller) and
+    delete the WAV. On any failure, keep the WAV."""
+    if not settings.compress_audio or not os.path.exists(wav_path):
+        return
+    opus_path = wav_path.rsplit(".", 1)[0] + ".opus"
+    try:
+        size = await asyncio.to_thread(
+            compress_to_opus, wav_path, opus_path, settings.opus_bitrate
+        )
+    except TranscodeError as e:
+        logger.warning("opus compression failed for %s: %s", lecture_id, e)
+        return
+    os.remove(wav_path)
+    lecture = session.get(Lecture, lecture_id)
+    if lecture is not None:
+        lecture.audio_path = opus_path
+        lecture.audio_format = "opus"
+        lecture.audio_bytes = size
+        lecture.disk_bytes = size
+        session.add(lecture)
+        session.commit()
 
 
 async def _finish(session: Session, lecture_id: int, path: str) -> None:

@@ -2,7 +2,7 @@
 
 Re-read this and `CLAUDE.md` at the start of every session.
 
-## Status: Phase (d) complete — awaiting push before Phase (e)
+## Status: Phase (e) complete — ALL PHASES DONE, awaiting final push
 
 ## Machine (detected 2026-11-16)
 - Apple M4, 10-core CPU, 10-core GPU, 24 GB RAM, macOS 15.7.4, arm64, Metal 3
@@ -105,11 +105,25 @@ RECOMMEND: live = small on mps int8 (cpu small fallback, 1.2x). Re-transcribe/fi
 ## NOT yet tested: real Claude notes (needs ANTHROPIC_API_KEY; would spend credits).
   Logic fully covered by fake-provider tests. To test real: set key in .env and record/regenerate.
 
-## What comes next
-- Phase (e): auth (one password -> session cookie, protect everything incl. WS, rate-limit
-  login), backup/restore (one-command archive+restore of db+notes.md+audio), Opus compression
-  of finished WAV (storage opt, deferred from c/d), Dockerfile + no-Docker path, README
-  (setup, HTTPS via Cloudflare Tunnel/Tailscale, keep-awake).
+## Finished: Phase (e) — auth, backup/restore, Opus, Docker, README
+- app/auth.py: one-password -> HMAC-signed session cookie; get_current_user dependency
+  protects every router AND the WebSocket; per-IP failed-login rate limit.
+- app/api/auth_routes.py: /api/login, /api/logout, /api/me.
+- Opus compression on stop (WAV -> Opus 24k, delete WAV); offline retranscribe decodes
+  Opus->temp WAV; config COMPRESS_AUDIO/OPUS_BITRATE/AUDIO_RETENTION_DAYS (startup cleanup).
+- app/backup.py: create/restore (db + audio + notes.md tar.gz), delete_old_audio; CLI
+  (python -m app.backup create|restore). GET /api/backup download endpoint.
+- Dockerfile + .dockerignore (ffmpeg, volumes for data + model cache; CPU note for Linux).
+- README.md: setup (Docker + no-Docker), .env, model benchmark table, HTTPS via
+  Cloudflare Tunnel/Tailscale, keep-awake (caffeinate), usage, API, backup/restore, tests.
+- static/index.html: login gate.
+- Tests: 40 passing (auth incl. WS cookie + rate limit, backup roundtrip + endpoint,
+  Opus compression). Smoke: auth-gated upload/retranscribe/backup + CLI backup/restore.
+
+## PROJECT COMPLETE — all phases (a)-(e) done. 40 tests pass.
+- Still untested: the REAL Claude notes path (needs ANTHROPIC_API_KEY; would spend credits).
+  Logic fully covered by fake-provider tests incl. the 3-hour flat-cost proof.
+  To validate real notes: put the key in .env and record (or /regenerate) — a few cents.
 
 ## iPhone recording still needs HTTPS (Cloudflare Tunnel/Tailscale; README in phase e).
   Local http://localhost:8000 works (secure context).

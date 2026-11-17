@@ -18,6 +18,11 @@ MIT license text requires the copyright notice and permission notice be retained
 with any substantial portions copied. When MIT code is ported, the relevant
 notice will be reproduced alongside the entry below.
 
-## Ported pieces (append as added)
+## Ported pieces
 
-_(none yet)_
+None. The reference projects were studied for approach (VAD/rolling-window
+transcription, delta-notes loop, REST/library design, note templates), but all
+code in this repository — including the notes prompts and templates — was written
+originally for this project. No source code was copied or ported, so no MIT
+copyright notices need reproducing here. lecture-note-app (PolyForm Noncommercial)
+was study-only and nothing from it was used.

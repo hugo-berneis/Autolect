@@ -6,16 +6,34 @@ opens its own DB session via the injected factory.
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 from sqlmodel import delete
 
 from ..audio import wav
+from ..audio.transcode import decode_to_wav
 from ..models import Lecture, TranscriptSegment
 from .base import TranscriptionProvider
 from .windowing import find_cut
 
 
 def retranscribe(
+    path: str,
+    provider: TranscriptionProvider,
+    session_factory,
+    lecture_id: int,
+) -> int:
+    # Accept compressed audio (Opus) by decoding to a temp WAV first.
+    wav_path, is_temp = decode_to_wav(path)
+    try:
+        return _retranscribe_wav(wav_path, provider, session_factory, lecture_id)
+    finally:
+        if is_temp:
+            os.unlink(wav_path)
+
+
+def _retranscribe_wav(
     path: str,
     provider: TranscriptionProvider,
     session_factory,

@@ -10,6 +10,12 @@
 <p id="warn"><b>Note:</b> Recording needs HTTPS (or localhost) and microphone permission.
 Locking the phone or leaving Safari stops capture.</p>
 
+<div id="login">
+  <input id="password" type="password" placeholder="Password">
+  <button id="loginBtn">Log in</button>
+  <span id="loginMsg"></span>
+</div>
+
 <h2>Record</h2>
 <form id="meta" onsubmit="return false">
   <div><label>Title <input id="title" value="Lecture"></label></div>
@@ -269,10 +275,25 @@ async function doUpload() {
 $('start').onclick = start;
 $('pause').onclick = pause;
 $('resume').onclick = resumeRec;
+async function checkAuth() {
+  const r = await fetch('/api/me');
+  if (r.ok) { $('login').style.display = 'none'; loadLectures(); }
+  else { $('login').style.display = ''; }
+}
+async function doLogin() {
+  const r = await fetch('/api/login', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password: $('password').value }),
+  });
+  if (r.ok) { $('login').style.display = 'none'; $('password').value = ''; loadLectures(); }
+  else { $('loginMsg').textContent = r.status === 429 ? 'rate limited, wait a minute' : 'wrong password'; }
+}
+
 $('stop').onclick = stop;
 $('addNote').onclick = addNote;
 $('upload').onclick = doUpload;
-loadLectures();
+$('loginBtn').onclick = doLogin;
+checkAuth();
 </script>
 </body>
 </html>
